@@ -1,13 +1,25 @@
 <!--
-  GCP CREDENTIALS & MIGRATION:
-  1. Google Cloud Console → APIs & Services → Credentials
-  2. Enable Play Android Developer API & Identity Services API
-  3. OAuth Consent Screen: configure external/internal, add your domains
-  4. Create OAuth client ID (Web app)
-     - Authorized JS origins:
+  GCP CREDENTIALS & ONBOARDING GUIDE:
+
+  1. Google Cloud Console → APIs & Services → OAuth consent screen
+     - Under "Test users", add your Google account email(s) that will use this app.
+     - Save and wait a few minutes for propagation.
+  2. Under "Authorized domains", add:
+     • example.com (if using custom domain) or localhost (for local testing)
+  3. Go to APIs & Services → Credentials
+     - Edit your OAuth client ID (Web application):
+       Authorized JavaScript origins:
          • http://localhost:8000
-         • https://your-app.vercel.app
-     - Save client ID here
+         • https://googleplay-login.vercel.app
+     - Save changes.
+  4. If your app is ready for public use, in the OAuth consent screen settings, click "Publish App" to move from Testing to Production.
+     - This removes the test-user restriction.
+
+  5. Enable APIs:
+     • Play Android Developer API
+     • Google Identity Services API
+
+  6. Copy your OAuth Client ID here:
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,10 +38,12 @@
     button { cursor: pointer; }
     .reviews-container { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #f9f9f9; padding: 10px; }
     .review { border-bottom: 1px solid #ddd; padding: 10px 0; }
+    .log { background: #eef; padding: 8px; margin: 8px 0; font-family: monospace; }
   </style>
 </head>
 <body>
   <h2>Play Store Reviews Manager</h2>
+  <div id="logContainer" class="log"></div>
 
   <section id="config">
     <label for="clientId">OAuth Client ID</label>
@@ -53,6 +67,13 @@
 
   <script>
     (function() {
+      // Utility log
+      const logContainer = document.getElementById('logContainer');
+      function log(msg) {
+        console.log(msg);
+        const el = document.createElement('div'); el.textContent = msg; logContainer.appendChild(el);
+      }
+
       let clientId = '';
       const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
       let tokenClient;
@@ -76,7 +97,8 @@
       // Initialize token client
       el.initBtn.addEventListener('click', () => {
         clientId = el.clientIdInput.value.trim();
-        if (!clientId) return alert('Please enter Client ID');
+        if (!clientId) { log('Initialization failed: Client ID missing'); return alert('Please enter Client ID'); }
+        log('Initializing Google Identity Services with Client ID: ' + clientId);
         tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope: SCOPES,
@@ -84,37 +106,45 @@
         });
         toggle(el.config, false);
         toggle(el.auth, true);
+        log('Token client initialized');
       });
 
       // Sign in
       el.signInBtn.addEventListener('click', () => {
+        log('Requesting access token (prompt=consent)');
         tokenClient.requestAccessToken({prompt: 'consent'});
       });
 
       // Sign out
       el.signOutBtn.addEventListener('click', () => {
+        log('Revoking token');
         google.accounts.oauth2.revoke(accessToken, () => {
           accessToken = '';
           updateUI(false);
+          log('Token revoked');
         });
       });
 
       // Fetch reviews
       el.fetchBtn.addEventListener('click', () => {
         const pkg = el.pkgInput.value.trim();
-        if (!pkg) return alert('Enter package name');
-        if (!accessToken) return alert('Please sign in first');
+        if (!pkg) { log('Fetch aborted: Package name missing'); return alert('Enter package name'); }
+        if (!accessToken) { log('Fetch aborted: Not signed in'); return alert('Please sign in first'); }
+        log('Fetching reviews for package: ' + pkg);
         fetchReviews(pkg);
       });
 
       // Handle token response
       function handleTokenResponse(resp) {
+        log('Token response received: ' + JSON.stringify(resp));
         if (resp.error) {
           console.error(resp);
+          log('Token error: ' + resp.error);
           return alert('Token error: ' + resp.error);
         }
         accessToken = resp.access_token;
         updateUI(true);
+        log('Access token set');
       }
 
       // Toggle element visibility
@@ -124,6 +154,7 @@
 
       // Update UI on sign in/out
       function updateUI(signedIn) {
+        log('Updating UI, signedIn=' + signedIn);
         toggle(el.signInBtn, !signedIn);
         toggle(el.signOutBtn, signedIn);
         toggle(el.userInfo, signedIn);
@@ -141,13 +172,15 @@
         toggle(el.reviews, true);
         try {
           const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}/reviews`;
-          const res = await fetch(url, {
-            headers: { Authorization: 'Bearer ' + accessToken }
-          });
+          log('Calling API: ' + url);
+          const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+          log('API response status: ' + res.status);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
+          log('Fetched reviews count: ' + (data.reviews || []).length);
           renderReviews(data.reviews || []);
         } catch (e) {
+          log('Error fetching reviews: ' + e.message);
           el.reviews.textContent = 'Error: ' + e.message;
         }
       }
@@ -156,12 +189,9 @@
       function renderReviews(reviews) {
         el.reviews.innerHTML = reviews.map(r => {
           const c = r.comments[0].userComment;
-          return `
-            <div class="review">
-              <strong>${c.authorName}</strong> (Rating: ${c.starRating})<br>
-              ${c.text}
-            </div>`;
+          return `<div class="review"><strong>${c.authorName}</strong> (Rating: ${c.starRating})<br>${c.text}</div>`;
         }).join('');
+        log('Rendered reviews');
       }
 
     })();
