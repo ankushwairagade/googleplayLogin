@@ -1,137 +1,170 @@
 <!--
-  STEP-BY-STEP GUIDE TO FIX ORIGIN AND CSP ERRORS:
-  1. In Google Cloud Console, whitelist your origins:
-     - http://localhost:8000
-     - https://googleplay-login.vercel.app
-  2. Serve over HTTP(S), not file:// (e.g., `python3 -m http.server 8000`).
-  3. Add/adjust your Content Security Policy to allow external Google scripts.
+  GCP CREDENTIALS & MIGRATION:
+  1. Google Cloud Console → APIs & Services → Credentials
+  2. Enable Play Android Developer API & Identity Services API
+  3. OAuth Consent Screen: configure external/internal, add your domains
+  4. Create OAuth client ID (Web app)
+     - Authorized JS origins:
+         • http://localhost:8000
+         • https://your-app.vercel.app
+     - Save client ID here
 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="script-src 'self' https://apis.google.com https://accounts.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval' blob: data:;">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Google Play Store Reviews Manager</title>
-  <!-- Load the Google APIs client library -->
-  <script src="https://apis.google.com/js/api.js"></script>
+  <meta http-equiv="Content-Security-Policy"
+        content="script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com 'unsafe-inline';">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Play Store Reviews Manager</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .hidden { display: none; }
-    input, button, textarea { padding: 8px; font-size: 1rem; margin: 4px 0; }
+    label, input, button { display: block; margin: 8px 0; }
+    input, button { padding: 8px; font-size: 1rem; }
     button { cursor: pointer; }
+    .reviews-container { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #f9f9f9; padding: 10px; }
     .review { border-bottom: 1px solid #ddd; padding: 10px 0; }
-    .reviews-container { max-height: 400px; overflow-y: auto; background: #f9f9f9; padding: 10px; }
   </style>
 </head>
 <body>
-  <h2>Google Play Store Reviews Manager</h2>
+  <h2>Play Store Reviews Manager</h2>
 
-  <!-- Prompt for Client ID -->
-  <div id="config-section">
-    <label for="clientId">OAuth Client ID:</label><br>
-    <input type="text" id="clientId" placeholder="Enter your Client ID here" style="width: 400px;"><br>
-    <button id="initBtn">Initialize Google API</button>
-  </div>
+  <section id="config">
+    <label for="clientId">OAuth Client ID</label>
+    <input type="text" id="clientId" placeholder="Your Client ID">
+    <button id="init">Initialize</button>
+  </section>
 
-  <div id="auth-section" class="hidden">
-    <button id="signin-btn">Sign In with Google</button>
-    <button id="signout-btn" class="hidden">Sign Out</button>
-    <div id="auth-info" class="hidden"></div>
-  </div>
+  <section id="auth" class="hidden">
+    <button id="signIn">Sign In & Authorize</button>
+    <button id="signOut" class="hidden">Sign Out</button>
+    <div id="userInfo" class="hidden"></div>
+  </section>
 
-  <div id="app-section" class="hidden">
-    <label for="pkg">Package Name:</label><br>
-    <input type="text" id="pkg" placeholder="e.g., com.example.myapp" style="width: 300px;"><br>
-    <button id="fetchBtn">Fetch Reviews</button>
-  </div>
+  <section id="app" class="hidden">
+    <label for="pkg">App Package Name</label>
+    <input type="text" id="pkg" placeholder="com.example.app">
+    <button id="fetch">Fetch Reviews</button>
+  </section>
 
   <div id="reviews" class="reviews-container hidden"></div>
 
   <script>
-    let CLIENT_ID = '';
-    const API_DISCOVERY_DOC = 'https://androidpublisher.googleapis.com/$discovery/rest?version=v3';
-    const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
-    let GoogleAuth;
+    (function() {
+      let clientId = '';
+      const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
+      let tokenClient;
+      let accessToken = '';
 
-    document.getElementById('initBtn').onclick = () => {
-      CLIENT_ID = document.getElementById('clientId').value.trim();
-      if (!CLIENT_ID) return alert('Please enter your OAuth Client ID.');
-      initializeGapiClient();
-      document.getElementById('config-section').classList.add('hidden');
-      document.getElementById('auth-section').classList.remove('hidden');
-    };
+      // Cache DOM elements
+      const el = {
+        config: document.getElementById('config'),
+        auth: document.getElementById('auth'),
+        app: document.getElementById('app'),
+        reviews: document.getElementById('reviews'),
+        clientIdInput: document.getElementById('clientId'),
+        initBtn: document.getElementById('init'),
+        signInBtn: document.getElementById('signIn'),
+        signOutBtn: document.getElementById('signOut'),
+        userInfo: document.getElementById('userInfo'),
+        pkgInput: document.getElementById('pkg'),
+        fetchBtn: document.getElementById('fetch')
+      };
 
-    function initializeGapiClient() {
-      gapi.load('client:auth2', () => {
-        gapi.client.init({
-          discoveryDocs: [API_DISCOVERY_DOC],
-          clientId: CLIENT_ID,
-          scope: SCOPES
-        }).then(() => {
-          GoogleAuth = gapi.auth2.getAuthInstance();
-          GoogleAuth.isSignedIn.listen(updateSigninStatus);
-          document.getElementById('signin-btn').onclick = () => GoogleAuth.signIn({prompt: 'select_account'});
-          document.getElementById('signout-btn').onclick = () => GoogleAuth.signOut();
-          updateSigninStatus(GoogleAuth.isSignedIn.get());
-        }).catch(err => {
-          console.error('Error initializing gapi client:', err);
-          alert('Could not initialize Google API. Check console for details.');
+      // Initialize token client
+      el.initBtn.addEventListener('click', () => {
+        clientId = el.clientIdInput.value.trim();
+        if (!clientId) return alert('Please enter Client ID');
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: SCOPES,
+          callback: handleTokenResponse
+        });
+        toggle(el.config, false);
+        toggle(el.auth, true);
+      });
+
+      // Sign in
+      el.signInBtn.addEventListener('click', () => {
+        tokenClient.requestAccessToken({prompt: 'consent'});
+      });
+
+      // Sign out
+      el.signOutBtn.addEventListener('click', () => {
+        google.accounts.oauth2.revoke(accessToken, () => {
+          accessToken = '';
+          updateUI(false);
         });
       });
-    }
 
-    function updateSigninStatus(isSignedIn) {
-      document.getElementById('signin-btn').classList.toggle('hidden', isSignedIn);
-      document.getElementById('signout-btn').classList.toggle('hidden', !isSignedIn);
-      document.getElementById('auth-info').classList.toggle('hidden', !isSignedIn);
-      document.getElementById('app-section').classList.toggle('hidden', !isSignedIn);
-      document.getElementById('reviews').classList.add('hidden');
-      if (isSignedIn) {
-        const profile = GoogleAuth.currentUser.get().getBasicProfile();
-        document.getElementById('auth-info').textContent = `Signed in as ${profile.getEmail()}`;
+      // Fetch reviews
+      el.fetchBtn.addEventListener('click', () => {
+        const pkg = el.pkgInput.value.trim();
+        if (!pkg) return alert('Enter package name');
+        if (!accessToken) return alert('Please sign in first');
+        fetchReviews(pkg);
+      });
+
+      // Handle token response
+      function handleTokenResponse(resp) {
+        if (resp.error) {
+          console.error(resp);
+          return alert('Token error: ' + resp.error);
+        }
+        accessToken = resp.access_token;
+        updateUI(true);
       }
-    }
 
-    document.getElementById('fetchBtn').onclick = async () => {
-      const pkg = document.getElementById('pkg').value.trim();
-      if (!pkg) return alert('Enter a package name.');
-      const reviewsContainer = document.getElementById('reviews');
-      reviewsContainer.textContent = 'Loading reviews...';
-      reviewsContainer.classList.remove('hidden');
-      try {
-        const resp = await gapi.client.androidpublisher.reviews.list({packageName: pkg});
-        const reviews = resp.result.reviews || [];
-        reviewsContainer.innerHTML = reviews.map(r => {
+      // Toggle element visibility
+      function toggle(element, show) {
+        element.classList.toggle('hidden', !show);
+      }
+
+      // Update UI on sign in/out
+      function updateUI(signedIn) {
+        toggle(el.signInBtn, !signedIn);
+        toggle(el.signOutBtn, signedIn);
+        toggle(el.userInfo, signedIn);
+        toggle(el.app, signedIn);
+        el.reviews.classList.add('hidden');
+        if (signedIn) {
+          el.userInfo.textContent = 'Authorized';
+          toggle(el.userInfo, true);
+        }
+      }
+
+      // Fetch and render reviews
+      async function fetchReviews(pkg) {
+        el.reviews.textContent = 'Loading...';
+        toggle(el.reviews, true);
+        try {
+          const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}/reviews`;
+          const res = await fetch(url, {
+            headers: { Authorization: 'Bearer ' + accessToken }
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          renderReviews(data.reviews || []);
+        } catch (e) {
+          el.reviews.textContent = 'Error: ' + e.message;
+        }
+      }
+
+      // Render reviews list
+      function renderReviews(reviews) {
+        el.reviews.innerHTML = reviews.map(r => {
           const c = r.comments[0].userComment;
-          return `<div class="review">
-            <strong>${c.authorName}</strong> (Rating: ${c.starRating})<br>
-            ${c.text}
-            <div><textarea rows="2" cols="60" placeholder="Your reply..."></textarea><br>
-            <button data-id="${r.reviewId}" class="reply-btn">Reply</button></div>
-          </div>`;
+          return `
+            <div class="review">
+              <strong>${c.authorName}</strong> (Rating: ${c.starRating})<br>
+              ${c.text}
+            </div>`;
         }).join('');
-        document.querySelectorAll('.reply-btn').forEach(btn => {
-          btn.onclick = async () => {
-            const id = btn.getAttribute('data-id');
-            const replyText = btn.previousElementSibling.value.trim();
-            if (!replyText) return alert('Enter a reply.');
-            try {
-              await gapi.client.androidpublisher.reviews.reply({
-                packageName: pkg,
-                reviewId: id,
-                resource: {replyText}
-              });
-              alert('Replied to ' + id);
-            } catch (e) {
-              alert('Reply failed: ' + e.result.error.message);
-            }
-          };
-        });
-      } catch (e) {
-        reviewsContainer.textContent = 'Error: ' + (e.result ? e.result.error.message : e.message);
       }
-    };
+
+    })();
   </script>
 </body>
 </html>
