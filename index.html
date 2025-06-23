@@ -1,9 +1,19 @@
+<!--
+  IMPORTANT CONFIGURATION:
+  1. In your Google Cloud Console, go to APIs & Services → Credentials.
+  2. Select your OAuth 2.0 Client ID and under "Authorized JavaScript origins", add:
+     - https://localhost (for local testing)
+     - https://your-vercel-domain.vercel.app (for production)
+  3. Under "Authorized redirect URIs", ensure you have your origin if using redirect flows.
+  4. After saving, redeploy your site.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Google Play Store SSO &amp; Reviews Management</title>
+  <!-- Load the Google APIs client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
@@ -44,6 +54,9 @@
         document.getElementById('signin-btn').onclick = () => GoogleAuth.signIn({prompt: 'select_account'});
         document.getElementById('signout-btn').onclick = () => GoogleAuth.signOut();
         updateSigninStatus(GoogleAuth.isSignedIn.get());
+      }).catch(error => {
+        console.error('gapi.client.init failed:', error);
+        alert('Google API initialization error. Check console for details.');
       });
     }
 
@@ -65,7 +78,7 @@
       const pkg = document.getElementById('pkg').value.trim();
       if (!pkg) return alert('Enter a package name');
       const reviewsContainer = document.getElementById('reviews');
-      reviewsContainer.innerHTML = 'Loading...';
+      reviewsContainer.textContent = 'Loading...';
       reviewsContainer.classList.remove('hidden');
       try {
         const resp = await gapi.client.androidpublisher.reviews.list({packageName: pkg});
@@ -89,16 +102,20 @@
             const textarea = btn.previousElementSibling;
             const replyText = textarea.value.trim();
             if (!replyText) return alert('Enter a reply');
-            await gapi.client.androidpublisher.reviews.reply({
-              packageName: pkg,
-              reviewId: reviewId,
-              resource: {replyText}
-            });
-            alert('Replied to ' + reviewId);
+            try {
+              await gapi.client.androidpublisher.reviews.reply({
+                packageName: pkg,
+                reviewId: reviewId,
+                resource: {replyText}
+              });
+              alert('Replied to ' + reviewId);
+            } catch (e) {
+              alert('Reply failed: ' + e.result.error.message);
+            }
           };
         });
       } catch (e) {
-        reviewsContainer.innerHTML = 'Error: ' + e.message;
+        reviewsContainer.textContent = 'Error: ' + (e.result ? e.result.error.message : e.message);
       }
     };
 
@@ -106,4 +123,3 @@
   </script>
 </body>
 </html>
-
