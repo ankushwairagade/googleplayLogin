@@ -1,20 +1,6 @@
 <!--
   GCP CREDENTIALS & ONBOARDING GUIDE:
-
-  1. Google Cloud Console → APIs & Services → OAuth consent screen
-     - Under "Test users", add your Google account email(s).
-     - Save and wait a few minutes for propagation.
-  2. Under "Authorized domains", add:
-     • http://localhost:8000
-     • https://your-vercel-domain.vercel.app
-  3. APIs & Services → Credentials
-     - Edit your OAuth client ID (Web application).
-     - Add Authorized JavaScript origins and redirect URIs as needed.
-     - Save changes.
-  4. APIs & Services → Library
-     - Enable Play Android Developer API & Identity Services API.
-  5. OAuth Consent Screen
-     - Publish App to remove test-user restriction if desired.
+  [unchanged...]
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,61 +12,60 @@
   <title>Play Store Reviews Manager</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .hidden { display: none; }
-    label, input, button { display: block; margin: 8px 0; }
-    input, button { padding: 8px; font-size: 1rem; }
-    button { cursor: pointer; }
-    .reviews-container { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #f9f9f9; padding: 10px; }
-    .review { border-bottom: 1px solid #ddd; padding: 10px 0; }
-    .log { background: #eef; padding: 8px; margin: 8px 0; font-family: monospace; white-space: pre-wrap; }
+    /* Layout */
+    body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 40px; display: flex; justify-content: center; }
+    .container { background: #fff; max-width: 600px; width: 100%; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; }
+    h2 { text-align: center; color: #333; margin-bottom: 20px; }
+    section { margin-bottom: 20px; }
+    label { font-weight: bold; color: #555; }
+    input[type=text] { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    button { background: #007bff; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; font-size: 1rem; transition: background 0.3s; }
+    button:hover { background: #0056b3; }
+    .button-group button { margin-right: 10px; }
+    .hidden { display: none !important; }
+    .reviews-container { background: #fafafa; border-radius: 4px; max-height: 300px; overflow-y: auto; padding: 10px; }
+    .review { background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px; margin-bottom: 10px; }
+    .log { background: #e9f7ef; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; font-family: monospace; max-height: 120px; overflow-y: auto; }
   </style>
 </head>
 <body>
-  <h2>Play Store Reviews Manager</h2>
-  <!-- Log output -->
-  <div id="logContainer" class="log"></div>
+  <div class="container">
+    <h2>Play Store Reviews Manager</h2>
+    <div id="logContainer" class="log"></div>
 
-  <!-- Configuration Section -->
-  <section id="config">
-    <label for="clientId">OAuth Client ID</label>
-    <input type="text" id="clientId" placeholder="Enter your Client ID here" style="width: 400px;">
-    <button id="init">Initialize</button>
-  </section>
+    <section id="config">
+      <label for="clientId">OAuth Client ID</label>
+      <input type="text" id="clientId" placeholder="Enter your Client ID here">
+      <button id="init">Initialize</button>
+    </section>
 
-  <!-- Authentication Section -->
-  <section id="auth" class="hidden">
-    <button id="signIn">Sign In & Authorize</button>
-    <button id="signOut" class="hidden">Sign Out</button>
-    <button id="refreshTokenBtn" class="hidden">Refresh Access Token</button>
-    <div id="userInfo" class="hidden"></div>
-  </section>
+    <section id="auth" class="hidden">
+      <div class="button-group">
+        <button id="signIn">Sign In & Authorize</button>
+        <button id="signOut" class="hidden">Sign Out</button>
+        <button id="refreshTokenBtn" class="hidden">Refresh Token</button>
+      </div>
+      <div id="userInfo" class="hidden" style="margin-top:10px; color:#28a745;"></div>
+    </section>
 
-  <!-- Application Section -->
-  <section id="app" class="hidden">
-    <label for="pkg">App Package Name</label>
-    <input type="text" id="pkg" placeholder="com.example.app">
-    <button id="fetch">Fetch Reviews</button>
-  </section>
+    <section id="app" class="hidden">
+      <label for="pkg">App Package Name</label>
+      <input type="text" id="pkg" placeholder="com.example.app">
+      <button id="fetch">Fetch Reviews</button>
+    </section>
 
-  <!-- Reviews Output -->
-  <div id="reviews" class="reviews-container hidden"></div>
+    <div id="reviews" class="reviews-container hidden"></div>
+  </div>
 
   <script>
     (function() {
-      // Utility log
       const logContainer = document.getElementById('logContainer');
-      function log(msg) {
-        console.log(msg);
-        const el = document.createElement('div'); el.textContent = msg; logContainer.appendChild(el);
-      }
+      function log(msg) { console.log(msg); const el = document.createElement('div'); el.textContent = msg; logContainer.appendChild(el); }
 
       let clientId = '';
       const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
       let tokenClient;
       let accessToken = '';
-
-      // Cache DOM elements
       const el = {
         config: document.getElementById('config'),
         auth: document.getElementById('auth'),
@@ -96,102 +81,36 @@
         fetchBtn: document.getElementById('fetch')
       };
 
-      // Initialize token client
       el.initBtn.addEventListener('click', () => {
         clientId = el.clientIdInput.value.trim();
-        if (!clientId) { log('Init failed: Client ID missing'); return alert('Please enter OAuth Client ID'); }
-        log('Initializing GIS Token Client with Client ID: ' + clientId);
-        tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: SCOPES,
-          callback: handleTokenResponse
-        });
-        toggle(el.config, false);
-        toggle(el.auth, true);
+        if (!clientId) { log('Init failed: Client ID missing'); return alert('Enter OAuth Client ID'); }
+        log('Init with Client ID: ' + clientId);
+        tokenClient = google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: SCOPES, callback: handleTokenResponse });
+        toggle(el.config, false); toggle(el.auth, true);
       });
 
-      // Sign in
-      el.signInBtn.addEventListener('click', () => {
-        log('Requesting access token with consent prompt');
-        tokenClient.requestAccessToken({prompt: 'consent'});
-      });
+      el.signInBtn.addEventListener('click', () => { log('Requesting token...'); tokenClient.requestAccessToken({prompt:'consent'}); });
+      el.refreshBtn.addEventListener('click', () => { log('Refreshing token...'); tokenClient.requestAccessToken({prompt:''}); });
+      el.signOutBtn.addEventListener('click', () => { log('Revoking token...'); google.accounts.oauth2.revoke(accessToken, () => { accessToken=''; updateUI(false); log('Token revoked'); }); });
+      el.fetchBtn.addEventListener('click', () => { const pkg = el.pkgInput.value.trim(); if(!pkg){log('No pkg');return alert('Enter package');} if(!accessToken){log('No token');return alert('Sign in');} fetchReviews(pkg); });
 
-      // Refresh token
-      el.refreshBtn.addEventListener('click', () => {
-        log('Refreshing access token silently');
-        tokenClient.requestAccessToken({prompt: ''});
-      });
+      function handleTokenResponse(resp) { log('TokenResponse: ' + JSON.stringify(resp)); if(resp.error){log('Error: '+resp.error);return alert('Token error');} accessToken = resp.access_token; updateUI(true); }
+      function toggle(elm, show){ elm.classList.toggle('hidden', !show); }
+      function updateUI(signed){ log('UI update: '+signed); toggle(el.signInBtn, !signed); toggle(el.signOutBtn, signed); toggle(el.refreshBtn, signed); toggle(el.userInfo, signed); toggle(el.app, signed); el.reviews.classList.add('hidden'); if(signed){ el.userInfo.textContent = 'Authorized'; log('Authorized'); }}
 
-      // Sign out
-      el.signOutBtn.addEventListener('click', () => {
-        log('Revoking access token');
-        google.accounts.oauth2.revoke(accessToken, () => {
-          accessToken = '';
-          updateUI(false);
-          log('Access token revoked');
-        });
-      });
-
-      // Handle token response
-      function handleTokenResponse(resp) {
-        log('Token response: ' + JSON.stringify(resp));
-        if (resp.error) {
-          log('Token error: ' + resp.error);
-          return alert('Error obtaining token: ' + resp.error);
-        }
-        accessToken = resp.access_token;
-        updateUI(true);
-        log('Access token obtained');
-      }
-
-      // Toggle element visibility
-      function toggle(element, show) {
-        element.classList.toggle('hidden', !show);
-      }
-
-      // Update UI on sign in/out
-      function updateUI(signedIn) {
-        log('UpdateUI signedIn=' + signedIn);
-        toggle(el.signInBtn, !signedIn);
-        toggle(el.signOutBtn, signedIn);
-        toggle(el.refreshBtn, signedIn);
-        toggle(el.userInfo, signedIn);
-        toggle(el.app, signedIn);
-        el.reviews.classList.add('hidden');
-        if (signedIn) {
-          el.userInfo.textContent = 'Authorized';
-          log('User authorized');
-        }
-      }
-
-      // Fetch and render reviews
       async function fetchReviews(pkg) {
-        el.reviews.textContent = 'Loading...';
-        toggle(el.reviews, true);
-        try {
+        el.reviews.textContent='Loading...'; toggle(el.reviews,true);
+        try{
           const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}/reviews`;
-          log('API: GET ' + url);
-          const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-          log('Response status: ' + res.status);
-          if (!res.ok) throw new Error(await res.text());
-          const data = await res.json();
-          log('Reviews count: ' + (data.reviews || []).length);
-          renderReviews(data.reviews || []);
-        } catch (e) {
-          log('Fetch error: ' + e.message);
-          el.reviews.textContent = 'Error: ' + e.message;
-        }
+          log('GET '+url);
+          const res = await fetch(url, {headers:{Authorization:'Bearer '+accessToken}});
+          log('Status: '+res.status);
+          if(!res.ok) throw new Error(await res.text());
+          const data = await res.json(); log('Count: '+(data.reviews||[]).length);
+          renderReviews(data.reviews||[]);
+        }catch(e){ log('FetchError: '+e.message); el.reviews.textContent='Error: '+e.message; }
       }
-
-      // Render reviews list
-      function renderReviews(reviews) {
-        el.reviews.innerHTML = reviews.map(r => {
-          const c = r.comments[0].userComment;
-          return `<div class="review"><strong>${c.authorName}</strong> (Rating: ${c.starRating})<br>${c.text}</div>`;
-        }).join('');
-        log('Rendered reviews');
-      }
-
+      function renderReviews(reviews) { el.reviews.innerHTML = reviews.map(r=>{const c=r.comments[0].userComment;return `<div class="review"><strong>${c.authorName}</strong> (${c.starRating})<br>${c.text}</div>`;}).join(''); log('Rendered'); }
     })();
   </script>
 </body>
