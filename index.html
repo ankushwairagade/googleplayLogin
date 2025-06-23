@@ -1,12 +1,19 @@
 <!--
-  This HTML now prompts for your Google OAuth Client ID via the UI and initializes the API client dynamically.
+  STEP-BY-STEP GUIDE TO FIX ORIGIN AND CSP ERRORS:
+  1. In Google Cloud Console, whitelist your origins:
+     - http://localhost:8000
+     - https://googleplay-login.vercel.app
+  2. Serve over HTTP(S), not file:// (e.g., `python3 -m http.server 8000`).
+  3. Add/adjust your Content Security Policy to allow external Google scripts.
 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' https://apis.google.com https://accounts.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval' blob: data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Google Play Store Reviews Manager</title>
+  <!-- Load the Google APIs client library -->
   <script src="https://apis.google.com/js/api.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
