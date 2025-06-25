@@ -113,6 +113,8 @@
 </body>
 </html> -->
 
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,38 +213,35 @@
   <div class="container">
     <h2>Play Store Reviews Manager</h2>
     <div class="main">
+      <!-- Configuration -->
       <section id="config">
         <label for="clientId">OAuth Client ID</label>
         <input type="text" id="clientId" placeholder="Enter your Client ID">
-
         <label for="clientSecret">OAuth Client Secret</label>
         <input type="password" id="clientSecret" placeholder="Enter your Client Secret">
-
-        <label for="refreshToken">Refresh Token</label>
-        <input type="text" id="refreshToken" placeholder="Enter your existing Refresh Token">
-
-        <button id="init">Initialize OAuth Client</button>
+        <button id="init">Initialize OAuth Code Client</button>
       </section>
 
+      <!-- Authorization & Token Display -->
       <section id="auth" class="hidden">
         <div class="button-group">
-          <button id="signIn">Sign In & Authorize</button>
-          <button id="refreshClientBtn">Refresh (TokenClient)</button>
+          <button id="signIn">Sign In & Get Refresh Token</button>
           <button id="refreshApiBtn">Refresh via API</button>
           <button id="signOut" class="hidden">Sign Out</button>
         </div>
         <div id="tokenDisplay" class="token-display hidden"></div>
       </section>
 
+      <!-- Fetch Reviews -->
       <section id="app" class="hidden">
         <label for="pkg">App Package Name</label>
         <input type="text" id="pkg" placeholder="com.example.app">
         <button id="fetch">Fetch Reviews</button>
       </section>
-
       <div id="reviews" class="reviews-container hidden"></div>
     </div>
 
+    <!-- Logger -->
     <div id="log" class="log-box"></div>
   </div>
 
@@ -257,8 +256,8 @@
     }
 
     const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
-    let tokenClient, accessToken = '';
-    let clientIdVal = '', clientSecretVal = '', refreshTokenVal = '';
+    let codeClient, accessToken = '', refreshTokenVal = '';
+    let clientIdVal = '', clientSecretVal = '';
 
     const els = {
       config:       document.getElementById('config'),
@@ -267,104 +266,124 @@
       reviews:      document.getElementById('reviews'),
       clientId:     document.getElementById('clientId'),
       clientSecret: document.getElementById('clientSecret'),
-      refreshToken: document.getElementById('refreshToken'),
       initBtn:      document.getElementById('init'),
       signInBtn:    document.getElementById('signIn'),
-      refreshClientBtn: document.getElementById('refreshClientBtn'),
-      refreshApiBtn: document.getElementById('refreshApiBtn'),
+      refreshApiBtn:document.getElementById('refreshApiBtn'),
       signOutBtn:   document.getElementById('signOut'),
       tokenDisplay: document.getElementById('tokenDisplay'),
       pkgInput:     document.getElementById('pkg'),
       fetchBtn:     document.getElementById('fetch'),
     };
 
-    // 1. Initialize OAuth2 TokenClient and store credentials
+    // 1. Initialize CodeClient
     els.initBtn.addEventListener('click', () => {
       clientIdVal = els.clientId.value.trim();
       clientSecretVal = els.clientSecret.value.trim();
-      refreshTokenVal = els.refreshToken.value.trim();
       if (!clientIdVal || !clientSecretVal) {
         return alert('Please enter both Client ID and Client Secret');
       }
-      log('Initializing TokenClient…');
-      tokenClient = google.accounts.oauth2.initTokenClient({
+      log('Initializing CodeClient for offline access');
+      codeClient = google.accounts.oauth2.initCodeClient({
         client_id: clientIdVal,
         scope: SCOPES,
-        callback: handleTokenResponse,
+        ux_mode: 'popup',
+        access_type: 'offline',
+        prompt: 'consent',
+        callback: handleCodeResponse
       });
       els.config.classList.add('hidden');
       els.auth.classList.remove('hidden');
     });
 
-    // 2. Sign In & get first access token
+    // 2. Sign In → get auth code & exchange
     els.signInBtn.addEventListener('click', () => {
-      log('Requesting access token (consent)…');
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      log('Requesting authorization code…');
+      codeClient.requestCode();
     });
 
-    // 3. Refresh via TokenClient (silent)
-    els.refreshClientBtn.addEventListener('click', () => {
-      if (!tokenClient) return alert('Not initialized');
-      log('Refreshing access token (silent)…');
-      tokenClient.requestAccessToken({ prompt: '' });
-    });
-
-    // 4. Refresh via explicit API call
-    els.refreshApiBtn.addEventListener('click', async () => {
-      if (!clientIdVal || !clientSecretVal || !refreshTokenVal) {
-        return alert('Make sure Client ID, Client Secret & Refresh Token are filled');
+    // 3. Exchange code for tokens
+    async function handleCodeResponse(resp) {
+      if (resp.error) {
+        log('Code flow error: ' + JSON.stringify(resp));
+        return alert('Auth error: ' + resp.error);
       }
-      log('Calling token endpoint via fetch…');
+      log('Received auth code: ' + resp.code);
+      // Exchange on the client (for demo purposes)
       const params = new URLSearchParams({
         client_id: clientIdVal,
         client_secret: clientSecretVal,
-        refresh_token: refreshTokenVal,
-        grant_type: 'refresh_token'
+        grant_type: 'authorization_code',
+        code: resp.code,
+        redirect_uri: 'urn:ietf:wg:oauth:2.0:oob'
       });
       try {
-        const res = await fetch('https://oauth2.googleapis.com/token', {
+        const r = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          headers: {'Content-Type':'application/x-www-form-urlencoded'},
           body: params.toString()
         });
-        const data = await res.json();
-        log(`Token API status: ${res.status}`);
-        log('Token API response: ' + JSON.stringify(data));
+        const data = await r.json();
+        log(`Token exchange status: ${r.status}`);
+        log('Token exchange response: ' + JSON.stringify(data));
+        if (data.refresh_token) {
+          refreshTokenVal = data.refresh_token;
+          log('✅ Refresh token: ' + refreshTokenVal);
+        }
         if (data.access_token) {
           accessToken = data.access_token;
           displayToken(accessToken);
-          log('Access token updated from API');
-        } else {
-          throw new Error(data.error || 'No access_token in response');
+          log('✅ Access token: ' + accessToken);
+        }
+        updateUI(true);
+      } catch (e) {
+        log('Exchange error: ' + e.message);
+        alert('Token exchange failed: ' + e.message);
+      }
+    }
+
+    // 4. Refresh via API call
+    els.refreshApiBtn.addEventListener('click', async () => {
+      if (!refreshTokenVal) {
+        return alert('No refresh token available; sign in first');
+      }
+      log('Refreshing via API with stored refresh token…');
+      const params = new URLSearchParams({
+        client_id: clientIdVal,
+        client_secret: clientSecretVal,
+        grant_type: 'refresh_token',
+        refresh_token: refreshTokenVal
+      });
+      try {
+        const r = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: {'Content-Type':'application/x-www-form-urlencoded'},
+          body: params.toString()
+        });
+        const data = await r.json();
+        log(`Refresh API status: ${r.status}`);
+        log('Refresh API response: ' + JSON.stringify(data));
+        if (data.access_token) {
+          accessToken = data.access_token;
+          displayToken(accessToken);
+          log('✅ New access token: ' + accessToken);
         }
       } catch (e) {
-        log('Refresh API error: ' + e.message);
-        alert('Refresh failed: ' + e.message);
+        log('API refresh error: ' + e.message);
+        alert('API refresh failed: ' + e.message);
       }
     });
 
-    // 5. Revoke token
+    // 5. Revoke
     els.signOutBtn.addEventListener('click', () => {
       if (!accessToken) return;
       log('Revoking token…');
       google.accounts.oauth2.revoke(accessToken, () => {
         accessToken = '';
+        refreshTokenVal = '';
         updateUI(false);
-        log('Token revoked');
+        log('🔒 Token revoked');
       });
     });
-
-    // Handle responses from TokenClient
-    function handleTokenResponse(resp) {
-      if (resp.error) {
-        log('TokenClient error: ' + JSON.stringify(resp));
-        return alert('TokenClient error: ' + resp.error);
-      }
-      accessToken = resp.access_token;
-      log('TokenClient response: ' + JSON.stringify(resp));
-      displayToken(accessToken);
-      updateUI(true);
-    }
 
     function displayToken(token) {
       els.tokenDisplay.textContent = token;
@@ -386,7 +405,7 @@
     els.fetchBtn.addEventListener('click', async () => {
       const pkg = els.pkgInput.value.trim();
       if (!pkg) return alert('Please enter a package name');
-      if (!accessToken) return alert('No access token available');
+      if (!accessToken) return alert('No access token; sign in first');
       log(`Fetching reviews for “${pkg}”…`);
       els.reviews.textContent = 'Loading…';
       els.reviews.classList.remove('hidden');
@@ -401,7 +420,7 @@
         if (!res.ok) throw new Error(text);
         const data = JSON.parse(text);
         renderReviews(data.reviews || []);
-        log(`Rendered ${(data.reviews || []).length} reviews`);
+        log(`Rendered ${(data.reviews||[]).length} reviews`);
       } catch (e) {
         log('Fetch error: ' + e.message);
         els.reviews.textContent = 'Error: ' + e.message;
