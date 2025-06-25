@@ -114,70 +114,43 @@
 </html> -->
 
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Play Store Reviews Manager</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    :root {
-      --primary: #1a73e8;
-      --bg: #f5f7fa;
-      --card: #fff;
-      --text: #202124;
-      --muted: #5f6368;
-      --border: #dadce0;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: var(--bg);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      color: var(--text);
-    }
-    .container {
-      background: var(--card);
-      width: 100%; max-width: 640px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      overflow: hidden;
-      display: flex; flex-direction: column;
-      height: 90vh;
-    }
-    header {
-      background: var(--primary);
-      padding: 16px;
-      text-align: center;
-    }
-    header h1 { color: #fff; font-size: 1.5rem; }
-    .main { flex: 1; padding: 24px; overflow-y: auto; }
-    .field-group { display: flex; gap: 16px; margin-bottom: 16px; }
-    .field-group > div { flex: 1; display: flex; flex-direction: column; }
-    label { font-size: 0.9rem; margin-bottom: 4px; color: var(--muted); }
-    input { padding: 12px; font-size: 1rem; border:1px solid var(--border); border-radius:6px; transition:border-color .2s; }
-    input:focus { border-color: var(--primary); }
-    .button-row { display:flex; gap:12px; margin-bottom:24px; }
-    button { flex:1; padding:12px; font-size:1rem; color:#fff; background:var(--primary); border:none; border-radius:6px; cursor:pointer; transition:background .2s; }
-    button.secondary { background:#e8eaed; color:var(--text); }
-    button:hover { background:#1558b0; }
-    button.secondary:hover { background:#dadce0; }
-    .token, .log { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px; font-family:monospace; font-size:0.9rem; margin-bottom:16px; max-height:100px; overflow:auto; }
-    .reviews { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); }
-    .review-card { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px; }
-    .review-card strong { color:var(--primary); }
-    .hidden { display:none; }
+    :root{--primary:#1a73e8;--bg:#f5f7fa;--card:#fff;--text:#202124;--muted:#5f6368;--border:#dadce0}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:var(--bg);display:flex;justify-content:center;align-items:center;height:100vh;color:var(--text)}
+    .container{background:var(--card);width:100%;max-width:640px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);overflow:hidden;display:flex;flex-direction:column;height:90vh}
+    header{background:var(--primary);padding:16px;text-align:center}
+    header h1{color:#fff;font-size:1.5rem}
+    .main{flex:1;padding:24px;overflow-y:auto}
+    .field-group{display:flex;gap:16px;margin-bottom:16px}
+    .field-group>div{flex:1;display:flex;flex-direction:column}
+    label{font-size:0.9rem;margin-bottom:4px;color:var(--muted)}
+    input{padding:12px;font-size:1rem;border:1px solid var(--border);border-radius:6px;transition:border-color .2s}
+    input:focus{border-color:var(--primary)}
+    .button-row{display:flex;gap:12px;margin-bottom:24px}
+    button{flex:1;padding:12px;font-size:1rem;color:#fff;background:var(--primary);border:none;border-radius:6px;cursor:pointer;transition:background .2s}
+    button.secondary{background:#e8eaed;color:var(--text)}
+    button:hover{background:#1558b0}
+    button.secondary:hover{background:#dadce0}
+    .token,.log{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:0.9rem;margin-bottom:16px;max-height:100px;overflow:auto}
+    .reviews{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+    .review-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px}
+    .review-card strong{color:var(--primary)}
+    .hidden{display:none}
   </style>
 </head>
 <body>
   <div class="container">
     <header><h1>Play Store Reviews Manager</h1></header>
     <div class="main">
+      <!-- OAuth Config -->
       <section id="config">
         <div class="field-group">
           <div><label for="clientId">Client ID</label><input id="clientId" placeholder="Client ID"></div>
@@ -186,6 +159,7 @@
         <button id="init">Initialize OAuth</button>
       </section>
 
+      <!-- Auth & Token Display -->
       <section id="auth" class="hidden">
         <div class="button-row">
           <button id="signIn">Sign In</button>
@@ -194,6 +168,7 @@
         <pre id="tokens" class="token hidden"></pre>
       </section>
 
+      <!-- Fetch Reviews -->
       <section id="app" class="hidden">
         <div class="field-group">
           <div><label for="pkg">Package Name</label><input id="pkg" placeholder="e.g. com.example.app"></div>
@@ -202,6 +177,7 @@
         <div id="reviews" class="reviews hidden"></div>
       </section>
 
+      <!-- Logger -->
       <pre id="log" class="log"></pre>
     </div>
   </div>
@@ -225,52 +201,73 @@
     let codeClient,tokens={access_token:'',refresh_token:''};
     const show=(id,v)=>document.getElementById(id).classList.toggle('hidden',!v);
 
+    // Initialize Code Client
     els.init.addEventListener('click',()=>{
       const cid=els.clientId.value.trim(),csec=els.clientSecret.value.trim();
       if(!cid||!csec)return alert('Enter credentials');
-      log('Init OAuth client');
-      codeClient=google.accounts.oauth2.initCodeClient({client_id:cid,scope:SCOPE,ux_mode:'popup',access_type:'offline',prompt:'consent',callback:handleCode});
+      log('Initializing OAuth code flow');
+      codeClient=google.accounts.oauth2.initCodeClient({
+        client_id:cid,scope:SCOPE,ux_mode:'popup',access_type:'offline',prompt:'consent',callback:handleCode
+      });
       show('config',false);show('auth',true);
     });
 
-    els.signIn.addEventListener('click',()=>{log('Request code');codeClient.requestCode();});
+    // Sign In -> get code
+    els.signIn.addEventListener('click',()=>{log('Requesting authorization code');codeClient.requestCode();});
 
+    // Handle code exchange
     async function handleCode(resp){
-      if(resp.error){log('Auth error:'+resp.error);return;}            
-      log('Code received');
-      await send('/api/exchange',{code:resp.code,client_id:els.clientId.value,client_secret:els.clientSecret.value});
+      if(resp.error){log('Auth error: '+resp.error);return;}
+      log('Authorization code received');
+      await send('/api/exchange',{
+        code:resp.code,
+        client_id:els.clientId.value,
+        client_secret:els.clientSecret.value
+      });
       show('app',true);
     }
 
-    els.refresh.addEventListener('click',()=>send('/api/refresh',{refresh_token:tokens.refresh_token,client_id:els.clientId.value,client_secret:els.clientSecret.value}));
+    // Refresh token endpoint
+    els.refresh.addEventListener('click',()=>send('/api/refresh',{
+      refresh_token:tokens.refresh_token,
+      client_id:els.clientId.value,
+      client_secret:els.clientSecret.value
+    }));
 
+    // Generic POST handler
     async function send(url,body){
       try{
         const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        const txt=await r.text();log(`${url} raw:`+txt);
+        const txt=await r.text();log(`${url} response raw: `+txt);
         const data=JSON.parse(txt);
-        if(!r.ok)return log(`${url} failed ${r.status}`);
+        if(!r.ok){log(`Error ${r.status} on ${url}`);return;}
         tokens={...tokens,...data};
-        log('Tokens:'+JSON.stringify(tokens));
+        log('Tokens updated: '+JSON.stringify(tokens));
         els.tokens.textContent=JSON.stringify(tokens,null,2);
         show('tokens',true);
-      }catch(e){log('Error:'+e);}  
+      }catch(e){log('Request error: '+e);}
     }
 
+    // Fetch reviews
     els.fetch.addEventListener('click',async()=>{
-      const pkg=els.pkg.value.trim();if(!pkg||!tokens.access_token)return alert('Missing pkg/token');
-      log('Fetch '+pkg);
+      const pkg=els.pkg.value.trim();
+      if(!pkg||!tokens.access_token)return alert('Missing package or access token');
+      log('Fetching reviews for '+pkg);
       show('reviews',true);els.reviews.innerHTML='';
       try{
-        const r=await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`,{headers:{Authorization:`Bearer ${tokens.access_token}`}});
-        const txt=await r.text();log('Reviews raw:'+txt);
+        const r=await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`,{
+          headers:{Authorization:`Bearer ${tokens.access_token}`}
+        });
+        const txt=await r.text();log('Reviews response raw: '+txt);
         const data=JSON.parse(txt);
-        if(!r.ok)return log('Fetch failed:'+r.status);
-        els.reviews.innerHTML=data.reviews.map(r=>{const c=r.comments[0].userComment;return`<div class="review-card"><strong>${c.authorName}</strong><p>${c.text||''}</p></div>`;}).join('')||'<p>No reviews.</p>';
-      }catch(e){log('Fetch err:'+e);}     
+        if(!r.ok){log('Fetch failed '+r.status);return;}
+        els.reviews.innerHTML=data.reviews.map(r=>{
+          const c=r.comments[0].userComment;
+          return `<div class="review-card"><strong>${c.authorName}</strong><p>${c.text||''}</p></div>`;
+        }).join('')||'<p>No reviews found</p>';
+      }catch(e){log('Fetch error: '+e);}    
     });
-
   })();
   </script>
 
-  <!-- new -->
+  <!-- new v2-->
