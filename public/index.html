@@ -150,7 +150,6 @@
   <div class="container">
     <header><h1>Play Store Reviews Manager</h1></header>
     <div class="main">
-      <!-- OAuth Config -->
       <section id="config">
         <div class="field-group">
           <div><label for="clientId">Client ID</label><input id="clientId" placeholder="Client ID"></div>
@@ -159,7 +158,6 @@
         <button id="init">Initialize OAuth</button>
       </section>
 
-      <!-- Auth & Token Display -->
       <section id="auth" class="hidden">
         <div class="button-row">
           <button id="signIn">Sign In</button>
@@ -168,7 +166,6 @@
         <pre id="tokens" class="token hidden"></pre>
       </section>
 
-      <!-- Fetch Reviews -->
       <section id="app" class="hidden">
         <div class="field-group">
           <div><label for="pkg">Package Name</label><input id="pkg" placeholder="e.g. com.example.app"></div>
@@ -177,7 +174,6 @@
         <div id="reviews" class="reviews hidden"></div>
       </section>
 
-      <!-- Logger -->
       <pre id="log" class="log"></pre>
     </div>
   </div>
@@ -185,7 +181,8 @@
   <script>
   (function(){
     const logEl=document.getElementById('log');
-    const log=msg=>{logEl.textContent+=`[${new Date().toLocaleTimeString()}] ${msg}\n`;logEl.scrollTop=logEl.scrollHeight;};
+    const log=msg=>{logEl.textContent+=`[${new Date().toLocaleTimeString()}] ${msg}
+`;logEl.scrollTop=logEl.scrollHeight;};
     const els={
       clientId:document.getElementById('clientId'),
       clientSecret:document.getElementById('clientSecret'),
@@ -201,73 +198,98 @@
     let codeClient,tokens={access_token:'',refresh_token:''};
     const show=(id,v)=>document.getElementById(id).classList.toggle('hidden',!v);
 
-    // Initialize Code Client
+    // Initialize OAuth Code Client
     els.init.addEventListener('click',()=>{
       const cid=els.clientId.value.trim(),csec=els.clientSecret.value.trim();
       if(!cid||!csec)return alert('Enter credentials');
       log('Initializing OAuth code flow');
       codeClient=google.accounts.oauth2.initCodeClient({
-        client_id:cid,scope:SCOPE,ux_mode:'popup',access_type:'offline',prompt:'consent',callback:handleCode
+        client_id:cid,
+        scope:SCOPE,
+        ux_mode:'popup',
+        access_type:'offline',
+        prompt:'consent',
+        callback:handleCode
       });
-      show('config',false);show('auth',true);
+      show('config',false);
+      show('auth',true);
     });
 
-    // Sign In -> get code
-    els.signIn.addEventListener('click',()=>{log('Requesting authorization code');codeClient.requestCode();});
+    // Request authorization code
+    els.signIn.addEventListener('click',()=>{
+      log('Requesting authorization code');
+      codeClient.requestCode();
+    });
 
-    // Handle code exchange
+    // Exchange code for tokens
     async function handleCode(resp){
-      if(resp.error){log('Auth error: '+resp.error);return;}
+      if(resp.error){ log('Auth error: '+resp.error); return; }
       log('Authorization code received');
       await send('/api/exchange',{
         code:resp.code,
         client_id:els.clientId.value,
         client_secret:els.clientSecret.value
       });
-      show('app',true);
+      show('app', true);
     }
 
-    // Refresh token endpoint
-    els.refresh.addEventListener('click',()=>send('/api/refresh',{
-      refresh_token:tokens.refresh_token,
-      client_id:els.clientId.value,
-      client_secret:els.clientSecret.value
-    }));
+    // Refresh access token
+    els.refresh.addEventListener('click',()=>{
+      send('/api/refresh',{
+        refresh_token:tokens.refresh_token,
+        client_id:els.clientId.value,
+        client_secret:els.clientSecret.value
+      });
+    });
 
-    // Generic POST handler
-    async function send(url,body){
-      try{
-        const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        const txt=await r.text();log(`${url} response raw: `+txt);
-        const data=JSON.parse(txt);
-        if(!r.ok){log(`Error ${r.status} on ${url}`);return;}
-        tokens={...tokens,...data};
-        log('Tokens updated: '+JSON.stringify(tokens));
-        els.tokens.textContent=JSON.stringify(tokens,null,2);
-        show('tokens',true);
-      }catch(e){log('Request error: '+e);}
-    }
-
-    // Fetch reviews
-    els.fetch.addEventListener('click',async()=>{
-      const pkg=els.pkg.value.trim();
-      if(!pkg||!tokens.access_token)return alert('Missing package or access token');
-      log('Fetching reviews for '+pkg);
-      show('reviews',true);els.reviews.innerHTML='';
-      try{
-        const r=await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`,{
-          headers:{Authorization:`Bearer ${tokens.access_token}`}
+    // Generic send function
+    async function send(url, body) {
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
         });
-        const txt=await r.text();log('Reviews response raw: '+txt);
-        const data=JSON.parse(txt);
-        if(!r.ok){log('Fetch failed '+r.status);return;}
-        els.reviews.innerHTML=data.reviews.map(r=>{
-          const c=r.comments[0].userComment;
+        const txt = await r.text();
+        log(`${url} raw response: ${txt}`);
+        const data = JSON.parse(txt);
+        if (!r.ok) { log(`Error ${r.status} on ${url}`); return; }
+        tokens = { ...tokens, ...data };
+        log('Tokens updated: ' + JSON.stringify(tokens));
+        els.tokens.textContent = JSON.stringify(tokens, null, 2);
+        show('tokens', true);
+      } catch(e) {
+        log('Request error: ' + e);
+      }
+    }
+
+    // Fetch and render reviews
+    els.fetch.addEventListener('click', async()=>{
+      const pkg = els.pkg.value.trim();
+      if (!pkg || !tokens.access_token) return alert('Missing package or access token');
+      log('Fetching reviews for ' + pkg);
+      show('reviews', true);
+      els.reviews.innerHTML = '<p>Loading...</p>';
+      try {
+        const r = await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`, {
+          headers: { Authorization: `Bearer ${tokens.access_token}` }
+        });
+        const txt = await r.text();
+        log('Reviews raw response: ' + txt);
+        let data;
+        try { data = JSON.parse(txt); }
+        catch(e) { log('JSON parse error: '+e); return els.reviews.innerHTML = '<p>Invalid JSON response</p>'; }
+        const list = Array.isArray(data.reviews)?data.reviews:[];
+        if (list.length === 0) els.reviews.innerHTML = '<p>No reviews found</p>';
+        else els.reviews.innerHTML = list.map(r=>{
+          const c = r.comments[0].userComment;
           return `<div class="review-card"><strong>${c.authorName}</strong><p>${c.text||''}</p></div>`;
-        }).join('')||'<p>No reviews found</p>';
-      }catch(e){log('Fetch error: '+e);}    
+        }).join('');
+      } catch(e) {
+        log('Fetch error: ' + e);
+        els.reviews.innerHTML = '<p>Error fetching reviews</p>';
+      }
     });
   })();
-  </script>
 
-  <!-- new v2-->
+  <!-- new v3-->
