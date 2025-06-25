@@ -1,5 +1,4 @@
 const fetch = require('node-fetch');
-
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).end();
   const auth = req.headers.authorization;
@@ -9,11 +8,11 @@ module.exports = async (req, res) => {
   try {
     const token = auth.split(' ')[1];
     const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}/reviews`;
-    const apiRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await apiRes.json();
-    return res.status(apiRes.ok ? 200 : apiRes.status).json(data);
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await r.json();
+    return res.status(r.ok ? 200 : r.status).json(data);
   } catch (err) {
-    console.error('reviews proxy error', err);
+    console.error(err);
     return res.status(500).json({ error: 'server_error' });
   }
 };

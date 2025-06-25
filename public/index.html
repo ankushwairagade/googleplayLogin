@@ -113,7 +113,6 @@
 </body>
 </html> -->
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -122,27 +121,24 @@
   <title>Play Store Reviews Manager</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    :root{--primary:#1a73e8;--bg:#f5f7fa;--card:#fff;--text:#202124;--muted:#5f6368;--border:#dadce0}
+    :root{--primary:#1a73e8;--bg:#f5f7fa;--card:#fff;--text:#202124;--border:#dadce0}
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Segoe UI',sans-serif;background:var(--bg);display:flex;justify-content:center;align-items:center;height:100vh;color:var(--text)}
-    .container{background:var(--card);width:100%;max-width:640px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);overflow:hidden;display:flex;flex-direction:column;height:90vh}
+    .container{background:var(--card);width:100%;max-width:640px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);display:flex;flex-direction:column;height:90vh;overflow:hidden}
     header{background:var(--primary);padding:16px;text-align:center}
     header h1{color:#fff;font-size:1.5rem}
     .main{flex:1;padding:24px;overflow-y:auto}
     .field-group{display:flex;gap:16px;margin-bottom:16px}
     .field-group>div{flex:1;display:flex;flex-direction:column}
-    label{font-size:0.9rem;margin-bottom:4px;color:var(--muted)}
-    input{padding:12px;font-size:1rem;border:1px solid var(--border);border-radius:6px;transition:border-color .2s}
-    input:focus{border-color:var(--primary)}
-    .button-row{display:flex;gap:12px;margin-bottom:24px}
-    button{flex:1;padding:12px;font-size:1rem;color:#fff;background:var(--primary);border:none;border-radius:6px;cursor:pointer;transition:background .2s}
-    button.secondary{background:#e8eaed;color:var(--text)}
-    button:hover{background:#1558b0}
-    button.secondary:hover{background:#dadce0}
-    .token,.log{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:0.9rem;margin-bottom:16px;max-height:100px;overflow:auto}
-    .reviews{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-    .review-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px}
-    .review-card strong{color:var(--primary)}
+    label{margin-bottom:4px;color:var(--text)}
+    input{padding:10px;border:1px solid var(--border);border-radius:4px;}
+    .button-row{display:flex;gap:12px;margin-bottom:16px}
+    button{flex:1;padding:10px;background:var(--primary);color:#fff;border:none;border-radius:4px;cursor:pointer;}
+    button.secondary{background:#e0e0e0;color:var(--text)}
+    button:hover{opacity:0.9}
+    .token,.log{margin-bottom:16px;padding:10px;border:1px solid var(--border);border-radius:4px;font-family:monospace;max-height:80px;overflow:auto}
+    .reviews{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+    .review-card{padding:10px;border:1px solid var(--border);border-radius:4px}
     .hidden{display:none}
   </style>
 </head>
@@ -155,9 +151,8 @@
           <div><label for="clientId">Client ID</label><input id="clientId" placeholder="Client ID"></div>
           <div><label for="clientSecret">Client Secret</label><input id="clientSecret" type="password" placeholder="Client Secret"></div>
         </div>
-        <button id="init">Initialize OAuth</button>
+        <button id="init">Initialize</button>
       </section>
-
       <section id="auth" class="hidden">
         <div class="button-row">
           <button id="signIn">Sign In</button>
@@ -165,131 +160,77 @@
         </div>
         <pre id="tokens" class="token hidden"></pre>
       </section>
-
       <section id="app" class="hidden">
         <div class="field-group">
-          <div><label for="pkg">Package Name</label><input id="pkg" placeholder="e.g. com.example.app"></div>
+          <div><label for="pkg">Package Name</label><input id="pkg" placeholder="com.example.app"></div>
         </div>
         <button id="fetch">Fetch Reviews</button>
         <div id="reviews" class="reviews hidden"></div>
       </section>
-
       <pre id="log" class="log"></pre>
     </div>
   </div>
-
   <script>
-  (function(){
-    const logEl=document.getElementById('log');
-    const log=msg=>{logEl.textContent+=`[${new Date().toLocaleTimeString()}] ${msg}
-`;logEl.scrollTop=logEl.scrollHeight;};
-    const els={
-      clientId:document.getElementById('clientId'),
-      clientSecret:document.getElementById('clientSecret'),
-      pkg:document.getElementById('pkg'),
-      init:document.getElementById('init'),
-      signIn:document.getElementById('signIn'),
-      refresh:document.getElementById('refresh'),
-      fetch:document.getElementById('fetch'),
-      tokens:document.getElementById('tokens'),
-      reviews:document.getElementById('reviews')
-    };
-    const SCOPE='https://www.googleapis.com/auth/androidpublisher';
-    let codeClient,tokens={access_token:'',refresh_token:''};
-    const show=(id,v)=>document.getElementById(id).classList.toggle('hidden',!v);
+    (function(){
+      const logEl = document.getElementById('log');
+      const log = m => { logEl.textContent += `[${new Date().toLocaleTimeString()}] ${m}\n`; logEl.scrollTop = logEl.scrollHeight; };
+      const els = {
+        clientId: document.getElementById('clientId'),
+        clientSecret: document.getElementById('clientSecret'),
+        pkg: document.getElementById('pkg'),
+        init: document.getElementById('init'),
+        signIn: document.getElementById('signIn'),
+        refresh: document.getElementById('refresh'),
+        fetch: document.getElementById('fetch'),
+        tokens: document.getElementById('tokens'),
+        reviews: document.getElementById('reviews')
+      };
+      const SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
+      let codeClient, tokens = { access_token:'', refresh_token:'' };
+      const show = (id,v) => document.getElementById(id).classList.toggle('hidden', !v);
 
-    // Initialize OAuth Code Client
-    els.init.addEventListener('click',()=>{
-      const cid=els.clientId.value.trim(),csec=els.clientSecret.value.trim();
-      if(!cid||!csec)return alert('Enter credentials');
-      log('Initializing OAuth code flow');
-      codeClient=google.accounts.oauth2.initCodeClient({
-        client_id:cid,
-        scope:SCOPE,
-        ux_mode:'popup',
-        access_type:'offline',
-        prompt:'consent',
-        callback:handleCode
+      els.init.addEventListener('click', ()=>{
+        const cid = els.clientId.value.trim(), csec = els.clientSecret.value.trim();
+        if(!cid||!csec) return alert('Enter credentials');
+        log('Init OAuth');
+        codeClient = google.accounts.oauth2.initCodeClient({ client_id:cid, scope:SCOPE, ux_mode:'popup', access_type:'offline', prompt:'consent', callback:async resp=>{
+          if(resp.error){ log('Auth error:'+resp.error); return; }
+          log('Code received');
+          await send('/api/exchange', { code:resp.code, client_id:cid, client_secret:csec });
+          show('app',true);
+        }});
+        show('config',false); show('auth',true);
       });
-      show('config',false);
-      show('auth',true);
-    });
+      els.signIn.addEventListener('click', ()=>{ log('Request code'); codeClient.requestCode(); });
+      els.refresh.addEventListener('click', ()=>send('/api/refresh',{ refresh_token:tokens.refresh_token, client_id:els.clientId.value, client_secret:els.clientSecret.value }));
 
-    // Request authorization code
-    els.signIn.addEventListener('click',()=>{
-      log('Requesting authorization code');
-      codeClient.requestCode();
-    });
-
-    // Exchange code for tokens
-    async function handleCode(resp){
-      if(resp.error){ log('Auth error: '+resp.error); return; }
-      log('Authorization code received');
-      await send('/api/exchange',{
-        code:resp.code,
-        client_id:els.clientId.value,
-        client_secret:els.clientSecret.value
-      });
-      show('app', true);
-    }
-
-    // Refresh access token
-    els.refresh.addEventListener('click',()=>{
-      send('/api/refresh',{
-        refresh_token:tokens.refresh_token,
-        client_id:els.clientId.value,
-        client_secret:els.clientSecret.value
-      });
-    });
-
-    // Generic send function
-    async function send(url, body) {
-      try {
-        const r = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        const txt = await r.text();
-        log(`${url} raw response: ${txt}`);
-        const data = JSON.parse(txt);
-        if (!r.ok) { log(`Error ${r.status} on ${url}`); return; }
-        tokens = { ...tokens, ...data };
-        log('Tokens updated: ' + JSON.stringify(tokens));
-        els.tokens.textContent = JSON.stringify(tokens, null, 2);
-        show('tokens', true);
-      } catch(e) {
-        log('Request error: ' + e);
+      async function send(url,body){
+        try{
+          const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+          const txt=await r.text(); log(`${url} raw:`+txt);
+          const data=JSON.parse(txt);
+          if(!r.ok){ log(`Error ${r.status}`); return; }
+          tokens={...tokens,...data}; log('Tokens:'+JSON.stringify(tokens));
+          els.tokens.textContent = JSON.stringify(tokens,null,2);
+          show('tokens',true);
+        }catch(e){ log('Err:'+e); }
       }
-    }
 
-    // Fetch and render reviews
-    els.fetch.addEventListener('click', async()=>{
-      const pkg = els.pkg.value.trim();
-      if (!pkg || !tokens.access_token) return alert('Missing package or access token');
-      log('Fetching reviews for ' + pkg);
-      show('reviews', true);
-      els.reviews.innerHTML = '<p>Loading...</p>';
-      try {
-        const r = await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`, {
-          headers: { Authorization: `Bearer ${tokens.access_token}` }
-        });
-        const txt = await r.text();
-        log('Reviews raw response: ' + txt);
-        let data;
-        try { data = JSON.parse(txt); }
-        catch(e) { log('JSON parse error: '+e); return els.reviews.innerHTML = '<p>Invalid JSON response</p>'; }
-        const list = Array.isArray(data.reviews)?data.reviews:[];
-        if (list.length === 0) els.reviews.innerHTML = '<p>No reviews found</p>';
-        else els.reviews.innerHTML = list.map(r=>{
-          const c = r.comments[0].userComment;
-          return `<div class="review-card"><strong>${c.authorName}</strong><p>${c.text||''}</p></div>`;
-        }).join('');
-      } catch(e) {
-        log('Fetch error: ' + e);
-        els.reviews.innerHTML = '<p>Error fetching reviews</p>';
-      }
-    });
-  })();
+      els.fetch.addEventListener('click',async ()=>{
+        const pkg=els.pkg.value.trim();
+        if(!pkg||!tokens.access_token) return alert('Missing pkg or token');
+        log('Fetch reviews '+pkg);
+        show('reviews',true); els.reviews.innerHTML='Loading...';
+        try{
+          const r=await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`,{ headers:{ Authorization:`Bearer ${tokens.access_token}` }});
+          const txt=await r.text(); log('Reviews raw:'+txt);
+          let data = {};
+          try{ data=JSON.parse(txt);}catch{};
+          const list = Array.isArray(data.reviews)?data.reviews:[];
+          els.reviews.innerHTML = list.length? list.map(r=>{ const c=r.comments[0].userComment; return `<div class="review-card"><strong>${c.authorName}</strong><p>${c.text||''}</p></div>`; }).join('') : '<p>No reviews</p>';
+        }catch(e){ log('Fetch err:'+e); els.reviews.innerHTML='<p>Error</p>'; }
+      });
+    })();
+  </script>
 
-  <!-- new v3-->
+  <!-- DONE -->
