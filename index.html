@@ -113,9 +113,6 @@
 </body>
 </html> -->
 
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -163,7 +160,7 @@
     }
     section { margin: 20px 0; }
     label { display: block; font-weight: bold; margin-bottom: 4px; }
-    input[type="text"] {
+    input[type="text"], input[type="password"] {
       width: 100%;
       padding: 8px;
       margin-bottom: 10px;
@@ -179,9 +176,10 @@
       font-size: 1rem;
       cursor: pointer;
       transition: background 0.3s;
+      margin-right: 8px;
     }
     button:hover { background: #0056b3; }
-    .button-group button { margin-right: 10px; }
+    .button-group { margin-bottom: 10px; }
     .hidden { display: none !important; }
     .reviews-container {
       background: #fafafa;
@@ -198,6 +196,15 @@
       padding: 10px;
       margin-bottom: 10px;
     }
+    .token-display {
+      background: #eef;
+      border: 1px solid #99c;
+      border-radius: 4px;
+      padding: 8px;
+      font-family: monospace;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -207,14 +214,24 @@
       <section id="config">
         <label for="clientId">OAuth Client ID</label>
         <input type="text" id="clientId" placeholder="Enter your Client ID">
-        <button id="init">Initialize</button>
+
+        <label for="clientSecret">OAuth Client Secret</label>
+        <input type="password" id="clientSecret" placeholder="Enter your Client Secret">
+
+        <label for="refreshToken">Refresh Token</label>
+        <input type="text" id="refreshToken" placeholder="Enter your existing Refresh Token">
+
+        <button id="init">Initialize OAuth Client</button>
       </section>
 
       <section id="auth" class="hidden">
         <div class="button-group">
           <button id="signIn">Sign In & Authorize</button>
+          <button id="refreshClientBtn">Refresh (TokenClient)</button>
+          <button id="refreshApiBtn">Refresh via API</button>
           <button id="signOut" class="hidden">Sign Out</button>
         </div>
+        <div id="tokenDisplay" class="token-display hidden"></div>
       </section>
 
       <section id="app" class="hidden">
@@ -241,26 +258,37 @@
 
     const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
     let tokenClient, accessToken = '';
+    let clientIdVal = '', clientSecretVal = '', refreshTokenVal = '';
 
     const els = {
-      config:      document.getElementById('config'),
-      auth:        document.getElementById('auth'),
-      app:         document.getElementById('app'),
-      reviews:     document.getElementById('reviews'),
-      clientId:    document.getElementById('clientId'),
-      initBtn:     document.getElementById('init'),
-      signInBtn:   document.getElementById('signIn'),
-      signOutBtn:  document.getElementById('signOut'),
-      pkgInput:    document.getElementById('pkg'),
-      fetchBtn:    document.getElementById('fetch'),
+      config:       document.getElementById('config'),
+      auth:         document.getElementById('auth'),
+      app:          document.getElementById('app'),
+      reviews:      document.getElementById('reviews'),
+      clientId:     document.getElementById('clientId'),
+      clientSecret: document.getElementById('clientSecret'),
+      refreshToken: document.getElementById('refreshToken'),
+      initBtn:      document.getElementById('init'),
+      signInBtn:    document.getElementById('signIn'),
+      refreshClientBtn: document.getElementById('refreshClientBtn'),
+      refreshApiBtn: document.getElementById('refreshApiBtn'),
+      signOutBtn:   document.getElementById('signOut'),
+      tokenDisplay: document.getElementById('tokenDisplay'),
+      pkgInput:     document.getElementById('pkg'),
+      fetchBtn:     document.getElementById('fetch'),
     };
 
+    // 1. Initialize OAuth2 TokenClient and store credentials
     els.initBtn.addEventListener('click', () => {
-      const cid = els.clientId.value.trim();
-      if (!cid) return alert('Please enter a Client ID');
-      log('Initializing with Client ID: ' + cid);
+      clientIdVal = els.clientId.value.trim();
+      clientSecretVal = els.clientSecret.value.trim();
+      refreshTokenVal = els.refreshToken.value.trim();
+      if (!clientIdVal || !clientSecretVal) {
+        return alert('Please enter both Client ID and Client Secret');
+      }
+      log('Initializing TokenClient…');
       tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: cid,
+        client_id: clientIdVal,
         scope: SCOPES,
         callback: handleTokenResponse,
       });
@@ -268,11 +296,54 @@
       els.auth.classList.remove('hidden');
     });
 
+    // 2. Sign In & get first access token
     els.signInBtn.addEventListener('click', () => {
-      log('Requesting access token…');
+      log('Requesting access token (consent)…');
       tokenClient.requestAccessToken({ prompt: 'consent' });
     });
 
+    // 3. Refresh via TokenClient (silent)
+    els.refreshClientBtn.addEventListener('click', () => {
+      if (!tokenClient) return alert('Not initialized');
+      log('Refreshing access token (silent)…');
+      tokenClient.requestAccessToken({ prompt: '' });
+    });
+
+    // 4. Refresh via explicit API call
+    els.refreshApiBtn.addEventListener('click', async () => {
+      if (!clientIdVal || !clientSecretVal || !refreshTokenVal) {
+        return alert('Make sure Client ID, Client Secret & Refresh Token are filled');
+      }
+      log('Calling token endpoint via fetch…');
+      const params = new URLSearchParams({
+        client_id: clientIdVal,
+        client_secret: clientSecretVal,
+        refresh_token: refreshTokenVal,
+        grant_type: 'refresh_token'
+      });
+      try {
+        const res = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+        const data = await res.json();
+        log(`Token API status: ${res.status}`);
+        log('Token API response: ' + JSON.stringify(data));
+        if (data.access_token) {
+          accessToken = data.access_token;
+          displayToken(accessToken);
+          log('Access token updated from API');
+        } else {
+          throw new Error(data.error || 'No access_token in response');
+        }
+      } catch (e) {
+        log('Refresh API error: ' + e.message);
+        alert('Refresh failed: ' + e.message);
+      }
+    });
+
+    // 5. Revoke token
     els.signOutBtn.addEventListener('click', () => {
       if (!accessToken) return;
       log('Revoking token…');
@@ -283,21 +354,21 @@
       });
     });
 
-    els.fetchBtn.addEventListener('click', () => {
-      const pkg = els.pkgInput.value.trim();
-      if (!pkg) return alert('Please enter a package name');
-      if (!accessToken) return alert('Please sign in first');
-      fetchReviews(pkg);
-    });
-
+    // Handle responses from TokenClient
     function handleTokenResponse(resp) {
       if (resp.error) {
-        log('Error obtaining token: ' + resp.error);
-        return alert('Token error: ' + resp.error);
+        log('TokenClient error: ' + JSON.stringify(resp));
+        return alert('TokenClient error: ' + resp.error);
       }
       accessToken = resp.access_token;
-      log('Access token received');
+      log('TokenClient response: ' + JSON.stringify(resp));
+      displayToken(accessToken);
       updateUI(true);
+    }
+
+    function displayToken(token) {
+      els.tokenDisplay.textContent = token;
+      els.tokenDisplay.classList.remove('hidden');
     }
 
     function updateUI(signedIn) {
@@ -308,9 +379,14 @@
       );
       els.app.classList.toggle('hidden', !signedIn);
       els.reviews.classList.add('hidden');
+      if (!signedIn) els.tokenDisplay.classList.add('hidden');
     }
 
-    async function fetchReviews(pkg) {
+    // 6. Fetch reviews
+    els.fetchBtn.addEventListener('click', async () => {
+      const pkg = els.pkgInput.value.trim();
+      if (!pkg) return alert('Please enter a package name');
+      if (!accessToken) return alert('No access token available');
       log(`Fetching reviews for “${pkg}”…`);
       els.reviews.textContent = 'Loading…';
       els.reviews.classList.remove('hidden');
@@ -319,16 +395,18 @@
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
-        log('HTTP status: ' + res.status);
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const text = await res.text();
+        log(`Reviews API status: ${res.status}`);
+        log('Reviews API raw response: ' + text);
+        if (!res.ok) throw new Error(text);
+        const data = JSON.parse(text);
         renderReviews(data.reviews || []);
         log(`Rendered ${(data.reviews || []).length} reviews`);
       } catch (e) {
         log('Fetch error: ' + e.message);
         els.reviews.textContent = 'Error: ' + e.message;
       }
-    }
+    });
 
     function renderReviews(reviews) {
       if (reviews.length === 0) {
