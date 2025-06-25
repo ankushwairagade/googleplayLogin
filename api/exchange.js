@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
       client_secret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: 'urn:ietf:wg:oauth:2.0:oob'
+      redirect_uri: 'postmessage' // Use 'postmessage' for web apps
     });
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
