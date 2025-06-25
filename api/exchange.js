@@ -1,6 +1,6 @@
-import fetch from 'node-fetch';
+const fetch = require('node-fetch');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   const { code, client_id, client_secret } = req.body;
   if (!code || !client_id || !client_secret) {
@@ -25,4 +25,4 @@ export default async function handler(req, res) {
     console.error(err);
     return res.status(500).json({ error: 'Server error' });
   }
-}
+};

@@ -113,7 +113,6 @@
 </body>
 </html> -->
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,24 +155,11 @@
       padding: 16px;
       text-align: center;
     }
-    header h1 {
-      color: #fff;
-      font-size: 1.5rem;
-    }
-    .main {
-      flex: 1;
-      padding: 24px;
-      overflow-y: auto;
-    }
-    .field-group {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
+    header h1 { color: #fff; font-size: 1.5rem; }
+    .main { flex: 1; padding: 24px; overflow-y: auto; }
+    .field-group { display: flex; gap: 16px; margin-bottom: 16px; }
     .field-group > div {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
+      flex: 1; display: flex; flex-direction: column;
     }
     label {
       font-size: 0.9rem;
@@ -185,17 +171,10 @@
       font-size: 1rem;
       border: 1px solid var(--border);
       border-radius: 6px;
-      outline: none;
       transition: border-color 0.2s;
     }
-    input:focus {
-      border-color: var(--primary);
-    }
-    .button-row {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
+    input:focus { border-color: var(--primary); }
+    .button-row { display: flex; gap: 12px; margin-bottom: 24px; }
     button {
       flex: 1;
       padding: 12px;
@@ -207,16 +186,9 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    button.secondary {
-      background: #e8eaed;
-      color: var(--text);
-    }
-    button:hover {
-      background: #1558b0;
-    }
-    button.secondary:hover {
-      background: #dadce0;
-    }
+    button.secondary { background: #e8eaed; color: var(--text); }
+    button:hover { background: #1558b0; }
+    button.secondary:hover { background: #dadce0; }
     .token, .log {
       background: var(--card);
       border: 1px solid var(--border);
@@ -228,42 +200,25 @@
       max-height: 100px;
       overflow: auto;
     }
-    .reviews {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-    }
+    .reviews { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
     .review-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
     }
-    .review-card strong {
-      color: var(--primary);
-    }
+    .review-card strong { color: var(--primary); }
     .hidden { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <header>
-      <h1>Play Store Reviews Manager</h1>
-    </header>
+    <header><h1>Play Store Reviews Manager</h1></header>
     <div class="main">
       <section id="config">
         <div class="field-group">
-          <div>
-            <label for="clientId">Client ID</label>
-            <input id="clientId" placeholder="Enter Client ID">
-          </div>
-          <div>
-            <label for="clientSecret">Client Secret</label>
-            <input id="clientSecret" type="password" placeholder="Enter Client Secret">
-          </div>
+          <div><label for="clientId">Client ID</label><input id="clientId" placeholder="Enter Client ID"></div>
+          <div><label for="clientSecret">Client Secret</label><input id="clientSecret" type="password" placeholder="Enter Client Secret"></div>
         </div>
         <button id="init">Initialize</button>
       </section>
@@ -278,10 +233,7 @@
 
       <section id="app" class="hidden">
         <div class="field-group">
-          <div>
-            <label for="pkg">Package Name</label>
-            <input id="pkg" placeholder="e.g. com.example.app">
-          </div>
+          <div><label for="pkg">Package Name</label><input id="pkg" placeholder="e.g. com.example.app"></div>
         </div>
         <button id="fetch">Fetch Reviews</button>
         <div id="reviews" class="reviews hidden"></div>
@@ -294,12 +246,7 @@
   <script>
   (function(){
     const logEl = document.getElementById('log');
-    const log = msg => {
-      logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}
-`;
-      logEl.scrollTop = logEl.scrollHeight;
-    };
-
+    const log = msg => { logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`; logEl.scrollTop = logEl.scrollHeight; };
     const els = {
       clientId: document.getElementById('clientId'),
       clientSecret: document.getElementById('clientSecret'),
@@ -320,8 +267,7 @@
       if (!cid || !csec) return alert('Enter both fields');
       log('Initializing OAuth...');
       codeClient = google.accounts.oauth2.initCodeClient({ client_id: cid, scope: SCOPE, ux_mode: 'popup', access_type: 'offline', prompt: 'consent', callback: handleCode });
-      show('config', false);
-      show('auth', true);
+      show('config', false); show('auth', true);
     });
 
     els.signIn.addEventListener('click', () => { log('Requesting auth code'); codeClient.requestCode(); });
@@ -329,8 +275,7 @@
     async function handleCode(resp) {
       if (resp.error) return log('Auth error: ' + resp.error);
       log('Auth code received');
-      const body = { code: resp.code, client_id: els.clientId.value, client_secret: els.clientSecret.value };
-      await sendToken('/api/exchange', body);
+      await sendToken('/api/exchange', { code: resp.code, client_id: els.clientId.value, client_secret: els.clientSecret.value });
       show('app', true);
     }
 
@@ -338,7 +283,7 @@
 
     async function sendToken(url, body) {
       try {
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
         const txt = await r.text(); log(`${url} response: ` + txt);
         const data = JSON.parse(txt);
         if (!r.ok) return log(`${url} failed, status ${r.status}`);
@@ -355,8 +300,7 @@
       const pkg = els.pkg.value.trim();
       if (!pkg || !tokens.access_token) return alert('Missing pkg/token');
       log('Fetching reviews for ' + pkg);
-      show('reviews', true);
-      els.reviews.textContent = '';
+      show('reviews', true); els.reviews.textContent = '';
       try {
         const r = await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
         const txt = await r.text(); log('Reviews response: ' + txt);
@@ -364,7 +308,7 @@
         if (!r.ok) return log('Reviews fetch failed: ' + r.status);
         els.reviews.innerHTML = (data.reviews || []).map(r => {
           const c = r.comments[0].userComment;
-          return `<div class="review-card"><strong>${c.authorName}</strong><span> (${c.starRating}★)</span><p>${c.text || ''}</p></div>`;
+          return `<div class="review-card"><strong>${c.authorName}</strong><span> (${c.starRating}★)</span><p>${c.text||''}</p></div>`;
         }).join('') || '<p>No reviews found.</p>';
       } catch (e) {
         log('Fetch error: ' + e);
