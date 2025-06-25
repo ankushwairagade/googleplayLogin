@@ -1,7 +1,4 @@
-<!--
-  GCP CREDENTIALS & ONBOARDING GUIDE:
-  [unchanged...]
--->
+<!-- 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,6 +109,242 @@
       }
       function renderReviews(reviews) { el.reviews.innerHTML = reviews.map(r=>{const c=r.comments[0].userComment;return `<div class="review"><strong>${c.authorName}</strong> (${c.starRating})<br>${c.text}</div>`;}).join(''); log('Rendered'); }
     })();
+  </script>
+</body>
+</html> -->
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com https://www.gstatic.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Play Store Reviews Manager</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      height: 100vh;
+    }
+    .container {
+      background: #fff;
+      width: 100%;
+      max-width: 600px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    h2 { text-align: center; margin: 20px 0 0; }
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 20px;
+    }
+    .log-box {
+      background: #202124;
+      color: #e8eaed;
+      font-family: monospace;
+      height: 140px;
+      overflow-y: auto;
+      padding: 10px;
+      border-top: 1px solid #444;
+    }
+    section { margin: 20px 0; }
+    label { display: block; font-weight: bold; margin-bottom: 4px; }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      background: #007bff;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover { background: #0056b3; }
+    .button-group button { margin-right: 10px; }
+    .hidden { display: none !important; }
+    .reviews-container {
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .review {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Play Store Reviews Manager</h2>
+    <div class="main">
+      <section id="config">
+        <label for="clientId">OAuth Client ID</label>
+        <input type="text" id="clientId" placeholder="Enter your Client ID">
+        <button id="init">Initialize</button>
+      </section>
+
+      <section id="auth" class="hidden">
+        <div class="button-group">
+          <button id="signIn">Sign In & Authorize</button>
+          <button id="signOut" class="hidden">Sign Out</button>
+        </div>
+      </section>
+
+      <section id="app" class="hidden">
+        <label for="pkg">App Package Name</label>
+        <input type="text" id="pkg" placeholder="com.example.app">
+        <button id="fetch">Fetch Reviews</button>
+      </section>
+
+      <div id="reviews" class="reviews-container hidden"></div>
+    </div>
+
+    <div id="log" class="log-box"></div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      const line = document.createElement('div');
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    const SCOPES = 'https://www.googleapis.com/auth/androidpublisher';
+    let tokenClient, accessToken = '';
+
+    const els = {
+      config:      document.getElementById('config'),
+      auth:        document.getElementById('auth'),
+      app:         document.getElementById('app'),
+      reviews:     document.getElementById('reviews'),
+      clientId:    document.getElementById('clientId'),
+      initBtn:     document.getElementById('init'),
+      signInBtn:   document.getElementById('signIn'),
+      signOutBtn:  document.getElementById('signOut'),
+      pkgInput:    document.getElementById('pkg'),
+      fetchBtn:    document.getElementById('fetch'),
+    };
+
+    els.initBtn.addEventListener('click', () => {
+      const cid = els.clientId.value.trim();
+      if (!cid) return alert('Please enter a Client ID');
+      log('Initializing with Client ID: ' + cid);
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: cid,
+        scope: SCOPES,
+        callback: handleTokenResponse,
+      });
+      els.config.classList.add('hidden');
+      els.auth.classList.remove('hidden');
+    });
+
+    els.signInBtn.addEventListener('click', () => {
+      log('Requesting access token…');
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    });
+
+    els.signOutBtn.addEventListener('click', () => {
+      if (!accessToken) return;
+      log('Revoking token…');
+      google.accounts.oauth2.revoke(accessToken, () => {
+        accessToken = '';
+        updateUI(false);
+        log('Token revoked');
+      });
+    });
+
+    els.fetchBtn.addEventListener('click', () => {
+      const pkg = els.pkgInput.value.trim();
+      if (!pkg) return alert('Please enter a package name');
+      if (!accessToken) return alert('Please sign in first');
+      fetchReviews(pkg);
+    });
+
+    function handleTokenResponse(resp) {
+      if (resp.error) {
+        log('Error obtaining token: ' + resp.error);
+        return alert('Token error: ' + resp.error);
+      }
+      accessToken = resp.access_token;
+      log('Access token received');
+      updateUI(true);
+    }
+
+    function updateUI(signedIn) {
+      els.auth.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('hidden',
+          b.id === 'signIn' ? signedIn : !signedIn
+        )
+      );
+      els.app.classList.toggle('hidden', !signedIn);
+      els.reviews.classList.add('hidden');
+    }
+
+    async function fetchReviews(pkg) {
+      log(`Fetching reviews for “${pkg}”…`);
+      els.reviews.textContent = 'Loading…';
+      els.reviews.classList.remove('hidden');
+      try {
+        const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}/reviews`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        log('HTTP status: ' + res.status);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        renderReviews(data.reviews || []);
+        log(`Rendered ${(data.reviews || []).length} reviews`);
+      } catch (e) {
+        log('Fetch error: ' + e.message);
+        els.reviews.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function renderReviews(reviews) {
+      if (reviews.length === 0) {
+        els.reviews.textContent = 'No reviews found.';
+        return;
+      }
+      els.reviews.innerHTML = reviews.map(r => {
+        const c = r.comments[0].userComment;
+        const text = c.text || '<em>(no text)</em>';
+        return `
+          <div class="review">
+            <strong>${c.authorName}</strong> (${c.starRating}★)<br>
+            ${text}
+          </div>`;
+      }).join('');
+    }
   </script>
 </body>
 </html>
