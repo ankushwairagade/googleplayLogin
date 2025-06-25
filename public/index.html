@@ -115,7 +115,6 @@
 
 
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -173,126 +172,165 @@
   </div>
 
   <script>
-  (function() {
-    const logEl = document.getElementById('log');
-    function log(msg) {
-      const d = document.createElement('div');
-      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logEl.appendChild(d);
-      logEl.scrollTop = logEl.scrollHeight;
-      console.log(msg);
+;(function() {
+  const logEl = document.getElementById('log');
+  function log(msg) {
+    const d = document.createElement('div');
+    d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+    console.log(msg);
+  }
+
+  const els = {
+    clientId: document.getElementById('clientId'),
+    clientSecret: document.getElementById('clientSecret'),
+    pkg: document.getElementById('pkg'),
+    init: document.getElementById('init'),
+    signIn: document.getElementById('signIn'),
+    refreshApi: document.getElementById('refreshApiBtn'),
+    fetch: document.getElementById('fetch'),
+    tokens: document.getElementById('tokens'),
+    reviews: document.getElementById('reviews')
+  };
+  const SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
+  let codeClient, tokens = { access_token: '', refresh_token: '' };
+
+  function show(id, visible) {
+    document.getElementById(id).classList.toggle('hidden', !visible);
+  }
+
+  // Initialize OAuth2 Code Client
+  els.init.addEventListener('click', () => {
+    const cid = els.clientId.value.trim();
+    const csec = els.clientSecret.value.trim();
+    if (!cid || !csec) return alert('Enter both Client ID & Secret');
+    log('Initializing code client');
+    codeClient = google.accounts.oauth2.initCodeClient({
+      client_id: cid,
+      scope: SCOPE,
+      ux_mode: 'popup',
+      access_type: 'offline',
+      prompt: 'consent',
+      callback: handleCodeResp
+    });
+    show('config', false);
+    show('auth', true);
+  });
+
+  // Sign In & Exchange code
+  els.signIn.addEventListener('click', () => {
+    log('Requesting auth code');
+    codeClient.requestCode();
+  });
+
+  async function handleCodeResp(resp) {
+    if (resp.error) {
+      log('Auth error: ' + resp.error);
+      return alert('Auth failed: ' + resp.error);
     }
-
-    const sections = { config: 'config', auth: 'auth', app: 'app' };
-    const els = {
-      clientId: document.getElementById('clientId'),
-      clientSecret: document.getElementById('clientSecret'),
-      pkg: document.getElementById('pkg'),
-      init: document.getElementById('init'),
-      signIn: document.getElementById('signIn'),
-      refreshApi: document.getElementById('refreshApiBtn'),
-      fetch: document.getElementById('fetch'),
-      tokens: document.getElementById('tokens'),
-      reviews: document.getElementById('reviews')
-    };
-    const SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
-    let codeClient, tokens = { access_token: '', refresh_token: '' };
-
-    function show(id, show) {
-      document.getElementById(id).classList.toggle('hidden', !show);
-    }
-
-    // Initialize OAuth2 Code Client
-    els.init.addEventListener('click', () => {
-      const cid = els.clientId.value.trim();
-      const csec = els.clientSecret.value.trim();
-      if (!cid || !csec) return alert('Enter both Client ID & Secret');
-      log('Initializing code client');
-      codeClient = google.accounts.oauth2.initCodeClient({
-        client_id: cid,
-        scope: SCOPE,
-        ux_mode: 'popup',
-        access_type: 'offline',
-        prompt: 'consent',
-        callback: handleCodeResp
+    log('Received auth code');
+    try {
+      const r = await fetch('/api/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          code: resp.code,
+          client_id: els.clientId.value.trim(),
+          client_secret: els.clientSecret.value.trim()
+        })
       });
-      show('config', false);
-      show('auth', true);
-    });
-
-    // Sign In & Exchange code
-    els.signIn.addEventListener('click', () => {
-      log('Requesting auth code');
-      codeClient.requestCode();
-    });
-
-    async function handleCodeResp(resp) {
-      if (resp.error) return log('Auth error: ' + resp.error);
-      log('Received auth code');
+      const raw = await r.text();
+      log('Exchange raw response: ' + raw);
+      let data;
       try {
-        const r = await fetch('/api/exchange', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: resp.code,
-            client_id: els.clientId.value.trim(),
-            client_secret: els.clientSecret.value.trim()
-          })
-        });
-        const data = await r.json();
-        log('Exchange response: ' + JSON.stringify(data));
-        if (data.refresh_token) tokens.refresh_token = data.refresh_token;
-        if (data.access_token) tokens.access_token = data.access_token;
-        els.tokens.textContent = JSON.stringify(tokens, null, 2);
-        show('tokens', true);
-        show('app', true);
-      } catch (e) {
-        log('Exchange error: ' + e);
+        data = JSON.parse(raw);
+      } catch(e) {
+        log('Failed to parse JSON: ' + e);
+        return alert('Exchange response invalid JSON');
       }
+      if (!r.ok) {
+        log('Exchange error status: ' + r.status);
+        return alert('Exchange failed: ' + (data.error || r.status));
+      }
+      if (data.refresh_token) tokens.refresh_token = data.refresh_token;
+      if (data.access_token) tokens.access_token = data.access_token;
+      log('Tokens updated: ' + JSON.stringify(tokens));
+      els.tokens.textContent = JSON.stringify(tokens, null, 2);
+      show('tokens', true);
+      show('app', true);
+    } catch (e) {
+      log('Exchange error: ' + e);
+      alert('Exchange request failed: ' + e);
     }
+  }
 
-    // Refresh via API
-    els.refreshApi.addEventListener('click', async () => {
-      if (!tokens.refresh_token) return alert('No refresh_token');
-      log('Refreshing via API');
+  // Refresh via API
+  els.refreshApi.addEventListener('click', async () => {
+    if (!tokens.refresh_token) return alert('No refresh_token');
+    log('Refreshing via API');
+    try {
+      const r = await fetch('/api/refresh', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          refresh_token: tokens.refresh_token,
+          client_id: els.clientId.value.trim(),
+          client_secret: els.clientSecret.value.trim()
+        })
+      });
+      const raw = await r.text();
+      log('Refresh raw response: ' + raw);
+      let data;
       try {
-        const r = await fetch('/api/refresh', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            refresh_token: tokens.refresh_token,
-            client_id: els.clientId.value.trim(),
-            client_secret: els.clientSecret.value.trim()
-          })
-        });
-        const data = await r.json();
-        log('Refresh response: ' + JSON.stringify(data));
-        if (data.access_token) tokens.access_token = data.access_token; 
-        els.tokens.textContent = JSON.stringify(tokens, null, 2);
-      } catch (e) {
-        log('Refresh error: ' + e);
+        data = JSON.parse(raw);
+      } catch(e) {
+        log('Failed to parse JSON: ' + e);
+        return alert('Refresh response invalid JSON');
       }
-    });
+      if (!r.ok) {
+        log('Refresh error status: ' + r.status);
+        return alert('Refresh failed: ' + (data.error || r.status));
+      }
+      if (data.access_token) tokens.access_token = data.access_token;
+      log('Tokens updated: ' + JSON.stringify(tokens));
+      els.tokens.textContent = JSON.stringify(tokens, null, 2);
+    } catch(e) {
+      log('Refresh error: ' + e);
+      alert('Refresh request failed: ' + e);
+    }
+  });
 
-    // Fetch Reviews
-    els.fetch.addEventListener('click', async () => {
-      const pkg = els.pkg.value.trim();
-      if (!pkg || !tokens.access_token) return alert('Missing package or access_token');
-      log('Fetching reviews for ' + pkg);
-      show('reviews', true);
-      els.reviews.textContent = 'Loading...';
-      try {
-        const r = await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`, {
-          headers: { Authorization: `Bearer ${tokens.access_token}` }
-        });
-        const data = await r.json();
-        log('Reviews response: ' + JSON.stringify(data));
-        els.reviews.innerHTML = (data.reviews || []).map(r => {
-          const c = r.comments[0].userComment;
-          return `<div class="review"><strong>${c.authorName}</strong> (${c.starRating}★)<br>${c.text||'<em>(no text)</em>'}</div>`;
-        }).join('') || 'No reviews found.';
-      } catch (e) {
-        log('Fetch error: ' + e);
-        els.reviews.textContent = 'Fetch failed';
+  // Fetch Reviews
+  els.fetch.addEventListener('click', async () => {
+    const pkg = els.pkg.value.trim();
+    if (!pkg || !tokens.access_token) return alert('Missing package or access_token');
+    log('Fetching reviews for ' + pkg);
+    show('reviews', true);
+    els.reviews.textContent = 'Loading...';
+    try {
+      const r = await fetch(`/api/reviews?pkg=${encodeURIComponent(pkg)}`, {
+        headers: { Authorization: `Bearer ${tokens.access_token}` }
+      });
+      const text = await r.text();
+      log('Reviews raw response: ' + text);
+      let data;
+      try { data = JSON.parse(text); } catch(e) {
+        log('Failed to parse JSON: ' + e);
+        return alert('Reviews response invalid JSON');
       }
-    });
-  })();
-  </script>
+      if (!r.ok) {
+        log('Reviews error status: ' + r.status);
+        return alert('Fetch reviews failed: ' + (data.error || r.status));
+      }
+      els.reviews.innerHTML = (data.reviews||[]).map(r => {
+        const c = r.comments[0].userComment;
+        return `<div class="review"><strong>${c.authorName}</strong> (${c.starRating}★)<br>${c.text||'<em>(no text)</em>'}</div>`;
+      }).join('') || 'No reviews found.';
+    } catch(e) {
+      log('Fetch error: ' + e);
+      els.reviews.textContent = 'Fetch failed';
+    }
+  });
+})();
+</script>
